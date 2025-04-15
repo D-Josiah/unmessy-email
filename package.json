@@ -1,0 +1,9 @@
+{
+    "name": "project-unmessy",
+    "version": "1.0.0",
+    "private": true,
+    "dependencies": {
+      "@vercel/kv": "^0.2.2",
+      "axios": "^1.6.2"
+    }
+  }
