@@ -3,7 +3,7 @@ import Cors from 'cors';
 // Initialize the cors middleware
 const cors = Cors({
   methods: ['GET', 'POST', 'OPTIONS'],
-  origin: '*'
+  origin: '*' // This allows all origins
 });
 
 // Helper method to run middleware
@@ -19,7 +19,7 @@ function runMiddleware(req, res, fn) {
 }
 
 export default async function handler(req, res) {
-  // Run the middleware
+  // Run the cors middleware
   await runMiddleware(req, res, cors);
   
   // Health check response
