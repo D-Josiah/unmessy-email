@@ -1,4 +1,5 @@
 import { EmailValidationService } from '../../src/services/email-validator';
+import { enableCors } from '../../src/middleware/cors';
 
 // Load configuration
 const config = {
@@ -12,6 +13,11 @@ const config = {
 const emailValidator = new EmailValidationService(config);
 
 export default async function handler(req, res) {
+  // Handle CORS first
+  if (enableCors(req, res)) {
+    return; // If it was an OPTIONS request, we're done
+  }
+  
   // Only allow POST method
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
