@@ -1,21 +1,12 @@
-import { EmailValidationService } from '../../src/services/email-validator';
-import { enableCors } from '../../src/middleware/cors';
-
-// Load configuration
-const config = {
-  useZeroBounce: process.env.USE_ZERO_BOUNCE === 'true',
-  zeroBounceApiKey: process.env.ZERO_BOUNCE_API_KEY || '',
-  removeGmailAliases: true,
-  checkAustralianTlds: true,
-};
-
-// Initialize the email validation service
-const emailValidator = new EmailValidationService(config);
-
 export default async function handler(req, res) {
-  // Handle CORS first
-  if (enableCors(req, res)) {
-    return; // If it was an OPTIONS request, we're done
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
   
   // Only allow POST method
@@ -30,7 +21,14 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Email is required' });
     }
     
-    const result = await emailValidator.validateEmail(email);
+    // Simple validation response
+    const result = {
+      originalEmail: email,
+      currentEmail: email.toLowerCase().trim(),
+      formatValid: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
+      status: 'unknown',
+      message: 'Basic validation only - debug mode'
+    };
     
     return res.status(200).json(result);
     
