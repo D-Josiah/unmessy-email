@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Email Validation Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 600px; 
+            margin: 20px auto; 
+            padding: 20px; 
+        }
+        textarea, input, button { 
+            width: 100%; 
+            margin: 10px 0; 
+            padding: 10px; 
+        }
+        #results { 
+            background-color: #f4f4f4; 
+            border: 1px solid #ddd; 
+            padding: 10px; 
+            white-space: pre-wrap; 
+        }
+    </style>
+</head>
+<body>
+    <h1>Email Validation Test</h1>
+    
+    <h2>Single Email Validation</h2>
+    <input type="text" id="singleEmail" placeholder="Enter an email">
+    <button onclick="validateSingleEmail()">Validate Single Email</button>
+    
+    <h2>Batch Email Validation</h2>
+    <textarea id="batchEmails" placeholder="Enter emails, one per line"></textarea>
+    <button onclick="validateBatchEmails()">Validate Batch Emails</button>
+    
+    <h2>Results</h2>
+    <pre id="results"></pre>
+
+    <script>
+        const API_BASE_URL = 'https://YOUR-VERCEL-DEPLOYMENT-URL'; // Replace with your actual deployment URL
+
+        async function validateSingleEmail() {
+            const email = document.getElementById('singleEmail').value;
+            const resultsEl = document.getElementById('results');
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/validate/email`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email })
+                });
+                
+                const data = await response.json();
+                resultsEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultsEl.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function validateBatchEmails() {
+            const emails = document.getElementById('batchEmails').value
+                .split('\n')
+                .map(email => email.trim())
+                .filter(email => email); // Remove empty lines
+            
+            const resultsEl = document.getElementById('results');
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/validate/email`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ emails })
+                });
+                
+                const data = await response.json();
+                resultsEl.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultsEl.textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
