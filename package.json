@@ -2,9 +2,22 @@
     "name": "project-unmessy",
     "version": "1.0.0",
     "private": true,
+    "scripts": {
+      "dev": "next dev",
+      "build": "next build",
+      "start": "next start",
+      "init-data": "node scripts/init-data.js",
+      "import-domains": "node scripts/import-data.js company-domains",
+      "import-emails": "node scripts/import-data.js validated-emails"
+    },
     "dependencies": {
-        "@vercel/kv": "^0.2.2",
-        "axios": "^1.8.4",
-        "cors": "^2.8.5"
+      "axios": "^1.3.6",
+      "crypto": "^1.0.1",
+      "next": "^12.3.4",
+      "papaparse": "^5.4.1",
+      "path": "^0.12.7"
+    },
+    "devDependencies": {
+      "nodemon": "^2.0.22"
     }
-}
+  }

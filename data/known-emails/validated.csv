@@ -1,0 +1,11 @@
+email,validation_date,validation_source,domain
+john.doe@example.com.au,2025-04-17T12:30:45Z,zerobounce,example.com.au
+sales@acme.com.au,2025-04-17T12:31:22Z,zerobounce,acme.com.au
+contact@widgets.net.au,2025-04-17T12:32:10Z,manual,widgets.net.au
+support@techcorp.com.au,2025-04-17T12:33:05Z,zerobounce,techcorp.com.au
+info@company.com.au,2025-04-17T12:34:18Z,hubspot-import,company.com.au
+marketing@business.com.au,2025-04-17T12:35:20Z,zerobounce,business.com.au
+hr@enterprise.net.au,2025-04-17T12:36:42Z,manual,enterprise.net.au
+admin@organization.org.au,2025-04-17T12:37:15Z,zerobounce,organization.org.au
+enquiries@shop.com.au,2025-04-17T12:38:30Z,hubspot-import,shop.com.au
+finance@corporation.com.au,2025-04-17T12:39:22Z,zerobounce,corporation.com.au

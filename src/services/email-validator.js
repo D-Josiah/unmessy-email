@@ -1,73 +1,60 @@
-import { kv } from '@vercel/kv';
+/**
+ * Email Validation Service
+ * Core service for validating and correcting email addresses
+ */
+
 import axios from 'axios';
+import CSVManager from '../utils/csv-manager';
+import { 
+  DOMAIN_TYPOS, 
+  AUSTRALIAN_TLDS,
+  correctDomainTypos,
+  correctAustralianTLD,
+  extractDomainFromEmail,
+  isValidDomainFormat
+} from '../utils/domain-utils';
 
 export class EmailValidationService {
+  /**
+   * Create a new EmailValidationService
+   * @param {Object} config - Configuration options
+   */
   constructor(config) {
     this.config = config;
     
-    // Common email domain typos
-    this.domainTypos = {
-      'gmial.com': 'gmail.com',
-      'gmal.com': 'gmail.com',
-      'gmail.cm': 'gmail.com',
-      'gmail.co': 'gmail.com',
-      'gamil.com': 'gmail.com',
-      'hotmial.com': 'hotmail.com',
-      'hotmail.cm': 'hotmail.com',
-      'yahoo.cm': 'yahoo.com',
-      'yaho.com': 'yahoo.com',
-      'outlook.cm': 'outlook.com',
-      'outlok.com': 'outlook.com'
-    };
+    // Initialize CSV manager
+    this.csvManager = new CSVManager({
+      dataDir: config.paths?.dataDir || config.dataDir
+    });
     
-    this.australianTlds = ['.com.au', '.net.au', '.org.au', '.edu.au', '.gov.au', '.asn.au', '.id.au', '.au'];
-    this.commonValidDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'aol.com'];
+    // Load data
+    this.validDomains = this.csvManager.loadValidDomains();
+    this.knownValidEmails = this.csvManager.loadValidatedEmails();
   }
   
-  // Add email to KV store
-  async addToKnownValidEmails(email) {
-    try {
-      const key = `email:${email}`;
-      const data = {
-        validatedAt: new Date().toISOString(),
-        source: 'validation-service'
-      };
-      
-      await kv.set(key, JSON.stringify(data));
-      
-      // Set expiration to 30 days (in seconds)
-      await kv.expire(key, 30 * 24 * 60 * 60);
-      
-      return true;
-    } catch (error) {
-      console.error('Error storing email in KV:', error);
-      return false;
-    }
-  }
-  
-  // Check if email exists in KV store
-  async isKnownValidEmail(email) {
-    try {
-      const key = `email:${email}`;
-      const result = await kv.get(key);
-      return !!result;
-    } catch (error) {
-      console.error('Error checking KV for email:', error);
-      return false;
-    }
-  }
-  
-  // Basic email format check with regex
+  /**
+   * Basic email format check with regex
+   * @param {string} email - Email to validate
+   * @returns {boolean} - Whether the email has valid format
+   */
   isValidEmailFormat(email) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email) return false;
+    
+    // RFC 5322 compliant email regex
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
     return emailRegex.test(email);
   }
   
-  // Clean and correct common email typos
+  /**
+   * Clean and correct common email typos
+   * @param {string} email - Email to correct
+   * @returns {Object} - {corrected: boolean, email: string, correctionType: string}
+   */
   correctEmailTypos(email) {
-    if (!email) return { corrected: false, email };
+    if (!email) return { corrected: false, email, correctionType: null };
     
     let corrected = false;
+    let correctionType = null;
     let cleanedEmail = email.trim().toLowerCase();
     
     // Remove any spaces
@@ -75,56 +62,93 @@ export class EmailValidationService {
     if (noSpaceEmail !== cleanedEmail) {
       cleanedEmail = noSpaceEmail;
       corrected = true;
+      correctionType = 'whitespace';
     }
+    
+    // Split into local part and domain
+    const parts = cleanedEmail.split('@');
+    if (parts.length !== 2) {
+      return { corrected, email: cleanedEmail, correctionType };
+    }
+    
+    const [localPart, domain] = parts;
     
     // Check for common domain typos
-    const [localPart, domain] = cleanedEmail.split('@');
+    const { corrected: domainCorrected, domain: correctedDomain } = correctDomainTypos(domain);
     
-    if (domain && this.domainTypos[domain]) {
-      cleanedEmail = `${localPart}@${this.domainTypos[domain]}`;
+    if (domainCorrected) {
+      cleanedEmail = `${localPart}@${correctedDomain}`;
       corrected = true;
+      correctionType = 'domain_typo';
     }
     
-    // Check for + alias in Gmail
-    if (this.config.removeGmailAliases && domain === 'gmail.com' && localPart.includes('+')) {
+    // Check for + alias in Gmail if configured to remove
+    if (this.config.validation?.removeGmailAliases && 
+        (correctedDomain || domain) === 'gmail.com' && 
+        localPart.includes('+')) {
       const baseLocal = localPart.split('+')[0];
       cleanedEmail = `${baseLocal}@gmail.com`;
       corrected = true;
+      correctionType = 'gmail_alias';
     }
     
-    // Check Australian TLDs
-    if (this.config.checkAustralianTlds) {
-      for (const tld of this.australianTlds) {
-        const tldNoDot = tld.replace(/\./g, '');
-        if (domain && domain.endsWith(tldNoDot) && !domain.endsWith(tld)) {
-          const index = domain.lastIndexOf(tldNoDot);
-          const newDomain = domain.substring(0, index) + tld;
-          cleanedEmail = `${localPart}@${newDomain}`;
-          corrected = true;
-          break;
-        }
+    // Check Australian TLDs if configured
+    if (this.config.validation?.checkAustralianTlds) {
+      const { corrected: tldCorrected, domain: tldCorrectedDomain } = correctAustralianTLD(
+        correctedDomain || domain
+      );
+      
+      if (tldCorrected) {
+        cleanedEmail = `${localPart}@${tldCorrectedDomain}`;
+        corrected = true;
+        correctionType = 'tld';
       }
     }
     
-    return { corrected, email: cleanedEmail };
-  }
-  
-  // Check if email domain is valid
-  isValidDomain(email) {
-    try {
-      const domain = email.split('@')[1];
-      return this.commonValidDomains.includes(domain);
-    } catch (error) {
-      return false;
+    // If a correction was made, log it
+    if (corrected) {
+      this.csvManager.addCorrectedEmail(email, cleanedEmail, correctionType);
     }
+    
+    return { corrected, email: cleanedEmail, correctionType };
   }
   
-  // Check email with ZeroBounce API
+  /**
+   * Check if email is in known valid emails list
+   * @param {string} email - Email to check
+   * @returns {boolean} - Whether email is known valid
+   */
+  isKnownValidEmail(email) {
+    return this.knownValidEmails.has(email.toLowerCase());
+  }
+  
+  /**
+   * Check if domain is considered valid
+   * @param {string} email - Email to check domain for
+   * @returns {boolean} - Whether domain is valid
+   */
+  isValidDomain(email) {
+    const domain = extractDomainFromEmail(email);
+    if (!domain) return false;
+    
+    return this.validDomains.has(domain.toLowerCase());
+  }
+  
+  /**
+   * Check email with ZeroBounce API
+   * @param {string} email - Email to validate
+   * @returns {Object} - Validation result
+   */
   async checkWithZeroBounce(email) {
     try {
+      // Ensure we have a ZeroBounce API key
+      if (!this.config.validation?.zeroBounceApiKey) {
+        throw new Error('ZeroBounce API key not configured');
+      }
+      
       const response = await axios.get('https://api.zerobounce.net/v2/validate', {
         params: {
-          api_key: this.config.zeroBounceApiKey,
+          api_key: this.config.validation.zeroBounceApiKey,
           email: email,
           ip_address: ''
         }
@@ -168,9 +192,10 @@ export class EmailValidationService {
           recheckNeeded = true;
       }
       
-      // If valid, add to our known valid emails
+      // If valid, add to known valid emails
       if (status === 'valid') {
-        await this.addToKnownValidEmails(email);
+        this.csvManager.addValidatedEmail(email, 'zerobounce');
+        this.knownValidEmails.add(email.toLowerCase());
       }
       
       return {
@@ -194,7 +219,11 @@ export class EmailValidationService {
     }
   }
   
-  // Main validation function
+  /**
+   * Main validation function
+   * @param {string} email - Email to validate
+   * @returns {Object} - Validation result
+   */
   async validateEmail(email) {
     const result = {
       originalEmail: email,
@@ -224,18 +253,19 @@ export class EmailValidationService {
     }
     
     // Step 2: Correct common typos
-    const { corrected, email: correctedEmail } = this.correctEmailTypos(email);
+    const { corrected, email: correctedEmail, correctionType } = this.correctEmailTypos(email);
     result.wasCorrected = corrected;
     result.currentEmail = correctedEmail;
     result.validationSteps.push({
       step: 'typo_correction',
       applied: corrected,
+      correctionType: correctionType,
       original: email,
       corrected: correctedEmail
     });
     
     // Step 3: Check if it's a known valid email
-    result.isKnownValid = await this.isKnownValidEmail(correctedEmail);
+    result.isKnownValid = this.isKnownValidEmail(correctedEmail);
     result.validationSteps.push({
       step: 'known_valid_check',
       passed: result.isKnownValid
@@ -255,7 +285,7 @@ export class EmailValidationService {
     });
     
     // Step 5: If enabled, check with ZeroBounce
-    if (this.config.useZeroBounce) {
+    if (this.config.validation?.useZeroBounce) {
       const bounceCheck = await this.checkWithZeroBounce(correctedEmail);
       result.status = bounceCheck.status;
       result.subStatus = bounceCheck.subStatus;
@@ -273,7 +303,11 @@ export class EmailValidationService {
     return result;
   }
   
-  // Process a batch of emails
+  /**
+   * Process a batch of emails
+   * @param {string[]} emails - Emails to validate
+   * @returns {Object[]} - Validation results
+   */
   async validateBatch(emails) {
     const results = [];
     
@@ -283,7 +317,7 @@ export class EmailValidationService {
         results.push(result);
         
         // Add a small delay to avoid rate limits if using ZeroBounce
-        if (this.config.useZeroBounce) {
+        if (this.config.validation?.useZeroBounce) {
           await new Promise(resolve => setTimeout(resolve, 300));
         }
       } catch (error) {
@@ -300,10 +334,15 @@ export class EmailValidationService {
     return results;
   }
   
-  // Update HubSpot contact
+  /**
+   * Update HubSpot contact with validation results
+   * @param {string} contactId - HubSpot contact ID
+   * @param {Object} validationResult - Validation result
+   * @returns {Object} - Update result
+   */
   async updateHubSpotContact(contactId, validationResult) {
     try {
-      if (!this.config.hubspot || !this.config.hubspot.apiKey) {
+      if (!this.config.hubspot?.apiKey) {
         throw new Error('HubSpot API key not configured');
       }
       

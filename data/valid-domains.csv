@@ -1,0 +1,10 @@
+domain,source,date_added,notes
+gmail.com,initial,2025-04-17,Common email provider
+outlook.com,initial,2025-04-17,Microsoft email
+yahoo.com,initial,2025-04-17,Yahoo email
+hotmail.com,initial,2025-04-17,Microsoft legacy email
+aol.com,initial,2025-04-17,AOL email
+icloud.com,initial,2025-04-17,Apple email
+example.com.au,initial,2025-04-17,Example Australian domain
+acme.com.au,customer,2025-04-17,Client domain
+widgets.net.au,verified,2025-04-17,Verified business

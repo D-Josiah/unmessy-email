@@ -1,31 +1,19 @@
+/**
+ * HubSpot webhook handler for email validation
+ */
+
 import { EmailValidationService } from '../../src/services/email-validator';
-import { enableCors } from '../../src/middleware/cors';
+import { loadConfig } from '../../src/config/config';
 import crypto from 'crypto';
 import axios from 'axios';
 
 // Load configuration
-const config = {
-  environment: process.env.NODE_ENV || 'development',
-  useZeroBounce: process.env.USE_ZERO_BOUNCE === 'true',
-  zeroBounceApiKey: process.env.ZERO_BOUNCE_API_KEY || '',
-  removeGmailAliases: true,
-  checkAustralianTlds: true,
-  hubspot: {
-    apiKey: process.env.HUBSPOT_API_KEY || '',
-    clientSecret: process.env.HUBSPOT_CLIENT_SECRET || '',
-  },
-  skipSignatureVerification: process.env.SKIP_SIGNATURE_VERIFICATION === 'true'
-};
+const config = loadConfig();
 
 // Initialize the email validation service
-const emailValidator = new EmailValidationService(config);
+let emailValidator = null;
 
 export default async function handler(req, res) {
-  // Handle CORS first
-  if (enableCors(req, res)) {
-    return; // If it was an OPTIONS request, we're done
-  }
-  
   // Only allow POST method
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -51,10 +39,15 @@ export default async function handler(req, res) {
   }
 }
 
-// Verify the HubSpot signature
+/**
+ * Verify the HubSpot signature
+ * @param {Object} req - Request object
+ * @param {Object} config - Configuration
+ * @returns {boolean} - Whether the signature is valid
+ */
 function verifyHubspotSignature(req, config) {
   // Skip verification in development if configured
-  if (config.environment === 'development' && config.skipSignatureVerification) {
+  if (config.environment === 'development' && config.hubspot?.skipSignatureVerification) {
     return true;
   }
   
@@ -64,6 +57,11 @@ function verifyHubspotSignature(req, config) {
     
     if (!signature) {
       console.error('Missing HubSpot signature');
+      return false;
+    }
+    
+    if (!config.hubspot?.clientSecret) {
+      console.error('HubSpot client secret not configured');
       return false;
     }
     
@@ -80,9 +78,19 @@ function verifyHubspotSignature(req, config) {
   }
 }
 
-// Process the webhook data
+/**
+ * Process the webhook data
+ * @param {Object} webhookData - Webhook data from HubSpot
+ * @param {Object} config - Configuration
+ * @returns {Object} - Processing result
+ */
 async function processWebhook(webhookData, config) {
   try {
+    // Initialize validator if needed
+    if (!emailValidator) {
+      emailValidator = new EmailValidationService(config);
+    }
+    
     // Extract the contact details
     const subscriptionType = webhookData.subscriptionType;
     const contactId = webhookData.objectId;
@@ -143,7 +151,11 @@ async function processWebhook(webhookData, config) {
   }
 }
 
-// Determine if we should validate based on the subscription type
+/**
+ * Determine if we should validate based on the subscription type
+ * @param {string} subscriptionType - HubSpot subscription type
+ * @returns {boolean} - Whether to validate
+ */
 function shouldValidateForSubscriptionType(subscriptionType) {
   // List of subscription types that should trigger validation
   const validSubscriptionTypes = [
@@ -155,9 +167,18 @@ function shouldValidateForSubscriptionType(subscriptionType) {
   return validSubscriptionTypes.includes(subscriptionType);
 }
 
-// Fetch contact details from HubSpot
+/**
+ * Fetch contact details from HubSpot
+ * @param {string} contactId - HubSpot contact ID
+ * @param {Object} config - Configuration
+ * @returns {Object} - Contact data
+ */
 async function fetchContactFromHubSpot(contactId, config) {
   try {
+    if (!config.hubspot?.apiKey) {
+      throw new Error('HubSpot API key not configured');
+    }
+    
     const response = await axios.get(
       `https://api.hubapi.com/crm/v3/objects/contacts/${contactId}?properties=email`,
       {

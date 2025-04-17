@@ -1,29 +1,28 @@
+/**
+ * Single email validation endpoint
+ */
+
 import { EmailValidationService } from '../../src/services/email-validator';
-import { enableCors } from '../../src/middleware/cors';
+import { loadConfig } from '../../src/config/config';
 
 // Load configuration
-const config = {
-  useZeroBounce: process.env.USE_ZERO_BOUNCE === 'true',
-  zeroBounceApiKey: process.env.ZERO_BOUNCE_API_KEY || '',
-  removeGmailAliases: true,
-  checkAustralianTlds: true,
-};
+const config = loadConfig();
 
 // Initialize the email validation service
-const emailValidator = new EmailValidationService(config);
+let emailValidator = null;
 
 export default async function handler(req, res) {
-  // Handle CORS first
-  if (enableCors(req, res)) {
-    return; // If it was an OPTIONS request, we're done
-  }
-  
   // Only allow POST method
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   
   try {
+    // Initialize validator if needed
+    if (!emailValidator) {
+      emailValidator = new EmailValidationService(config);
+    }
+    
     const { email } = req.body;
     
     if (!email) {
