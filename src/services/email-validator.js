@@ -5,6 +5,7 @@
 
 import axios from 'axios';
 import CSVManager from '../utils/csv-manager';
+import logger from '../utils/logger';
 import { 
   DOMAIN_TYPOS, 
   AUSTRALIAN_TLDS,
@@ -22,6 +23,11 @@ export class EmailValidationService {
   constructor(config) {
     this.config = config;
     
+    logger.info('Initializing EmailValidationService', {
+      environment: config.environment,
+      useZeroBounce: config.validation?.useZeroBounce
+    });
+    
     // Initialize CSV manager
     this.csvManager = new CSVManager({
       dataDir: config.paths?.dataDir || config.dataDir
@@ -30,6 +36,11 @@ export class EmailValidationService {
     // Load data
     this.validDomains = this.csvManager.loadValidDomains();
     this.knownValidEmails = this.csvManager.loadValidatedEmails();
+    
+    logger.info('EmailValidationService initialized', {
+      domainsLoaded: this.validDomains.size,
+      emailsLoaded: this.knownValidEmails.size
+    });
   }
   
   /**
@@ -42,7 +53,13 @@ export class EmailValidationService {
     
     // RFC 5322 compliant email regex
     const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-    return emailRegex.test(email);
+    const result = emailRegex.test(email);
+    
+    if (!result) {
+      logger.debug(`Email format check failed for: ${email}`);
+    }
+    
+    return result;
   }
   
   /**
@@ -63,6 +80,7 @@ export class EmailValidationService {
       cleanedEmail = noSpaceEmail;
       corrected = true;
       correctionType = 'whitespace';
+      logger.debug(`Whitespace removed: ${email} -> ${cleanedEmail}`);
     }
     
     // Split into local part and domain
@@ -80,6 +98,7 @@ export class EmailValidationService {
       cleanedEmail = `${localPart}@${correctedDomain}`;
       corrected = true;
       correctionType = 'domain_typo';
+      logger.debug(`Domain typo corrected: ${domain} -> ${correctedDomain}`);
     }
     
     // Check for + alias in Gmail if configured to remove
@@ -90,6 +109,7 @@ export class EmailValidationService {
       cleanedEmail = `${baseLocal}@gmail.com`;
       corrected = true;
       correctionType = 'gmail_alias';
+      logger.debug(`Gmail alias removed: ${localPart} -> ${baseLocal}`);
     }
     
     // Check Australian TLDs if configured
@@ -102,11 +122,13 @@ export class EmailValidationService {
         cleanedEmail = `${localPart}@${tldCorrectedDomain}`;
         corrected = true;
         correctionType = 'tld';
+        logger.debug(`Australian TLD corrected: ${domain} -> ${tldCorrectedDomain}`);
       }
     }
     
     // If a correction was made, log it
     if (corrected) {
+      logger.info(`Email corrected: ${email} -> ${cleanedEmail}`, { correctionType });
       this.csvManager.addCorrectedEmail(email, cleanedEmail, correctionType);
     }
     
@@ -119,7 +141,13 @@ export class EmailValidationService {
    * @returns {boolean} - Whether email is known valid
    */
   isKnownValidEmail(email) {
-    return this.knownValidEmails.has(email.toLowerCase());
+    const result = this.knownValidEmails.has(email.toLowerCase());
+    
+    if (result) {
+      logger.debug(`Email found in known valid list: ${email}`);
+    }
+    
+    return result;
   }
   
   /**
@@ -131,7 +159,13 @@ export class EmailValidationService {
     const domain = extractDomainFromEmail(email);
     if (!domain) return false;
     
-    return this.validDomains.has(domain.toLowerCase());
+    const result = this.validDomains.has(domain.toLowerCase());
+    
+    if (result) {
+      logger.debug(`Domain found in valid domains list: ${domain}`);
+    }
+    
+    return result;
   }
   
   /**
@@ -143,8 +177,11 @@ export class EmailValidationService {
     try {
       // Ensure we have a ZeroBounce API key
       if (!this.config.validation?.zeroBounceApiKey) {
+        logger.error('ZeroBounce API key not configured');
         throw new Error('ZeroBounce API key not configured');
       }
+      
+      logger.info(`Checking email with ZeroBounce: ${email}`);
       
       const response = await axios.get('https://api.zerobounce.net/v2/validate', {
         params: {
@@ -155,6 +192,12 @@ export class EmailValidationService {
       });
       
       const result = response.data;
+      
+      // Log ZeroBounce response
+      logger.debug(`ZeroBounce response for ${email}:`, {
+        status: result.status,
+        subStatus: result.sub_status
+      });
       
       // Map ZeroBounce status to our simplified status
       let status, subStatus, recheckNeeded;
@@ -194,6 +237,7 @@ export class EmailValidationService {
       
       // If valid, add to known valid emails
       if (status === 'valid') {
+        logger.info(`Adding valid email to known list: ${email}`);
         this.csvManager.addValidatedEmail(email, 'zerobounce');
         this.knownValidEmails.add(email.toLowerCase());
       }
@@ -208,7 +252,7 @@ export class EmailValidationService {
       };
       
     } catch (error) {
-      console.error('ZeroBounce API error:', error);
+      logger.error(`ZeroBounce API error for ${email}:`, error);
       return {
         email,
         status: 'check_failed',
@@ -225,6 +269,8 @@ export class EmailValidationService {
    * @returns {Object} - Validation result
    */
   async validateEmail(email) {
+    logger.info(`Validating email: ${email}`);
+    
     const result = {
       originalEmail: email,
       currentEmail: email,
@@ -249,6 +295,7 @@ export class EmailValidationService {
       result.status = 'invalid';
       result.subStatus = 'bad_format';
       result.recheckNeeded = false;
+      logger.info(`Email has invalid format: ${email}`);
       return result;
     }
     
@@ -274,6 +321,7 @@ export class EmailValidationService {
     if (result.isKnownValid) {
       result.status = 'valid';
       result.recheckNeeded = false;
+      logger.info(`Email found in known valid list: ${correctedEmail}`);
       return result;
     }
     
@@ -294,10 +342,20 @@ export class EmailValidationService {
         step: 'zerobounce_check',
         result: bounceCheck
       });
+      
+      logger.info(`ZeroBounce validation result for ${correctedEmail}:`, {
+        status: result.status,
+        subStatus: result.subStatus,
+        recheckNeeded: result.recheckNeeded
+      });
     } else {
       // Without ZeroBounce, rely on domain check
       result.status = result.domainValid ? 'unknown' : 'invalid';
       result.recheckNeeded = result.domainValid;
+      logger.info(`Domain-only validation result for ${correctedEmail}:`, {
+        status: result.status,
+        recheckNeeded: result.recheckNeeded
+      });
     }
     
     return result;
@@ -309,6 +367,8 @@ export class EmailValidationService {
    * @returns {Object[]} - Validation results
    */
   async validateBatch(emails) {
+    logger.info(`Starting batch validation of ${emails.length} emails`);
+    
     const results = [];
     
     for (const email of emails) {
@@ -321,7 +381,7 @@ export class EmailValidationService {
           await new Promise(resolve => setTimeout(resolve, 300));
         }
       } catch (error) {
-        console.error(`Error validating email ${email}:`, error);
+        logger.error(`Error validating email ${email}:`, error);
         results.push({
           originalEmail: email,
           currentEmail: email,
@@ -331,6 +391,7 @@ export class EmailValidationService {
       }
     }
     
+    logger.info(`Completed batch validation of ${emails.length} emails`);
     return results;
   }
   
@@ -341,8 +402,11 @@ export class EmailValidationService {
    * @returns {Object} - Update result
    */
   async updateHubSpotContact(contactId, validationResult) {
+    logger.info(`Updating HubSpot contact ${contactId} with validation results`);
+    
     try {
       if (!this.config.hubspot?.apiKey) {
+        logger.error('HubSpot API key not configured');
         throw new Error('HubSpot API key not configured');
       }
       
@@ -362,6 +426,8 @@ export class EmailValidationService {
         properties.email_sub_status = validationResult.subStatus;
       }
       
+      logger.debug(`HubSpot update properties for ${contactId}:`, properties);
+      
       const response = await axios.patch(
         `https://api.hubapi.com/crm/v3/objects/contacts/${contactId}`,
         { properties },
@@ -373,6 +439,8 @@ export class EmailValidationService {
         }
       );
       
+      logger.info(`Successfully updated HubSpot contact ${contactId}`);
+      
       return {
         success: true,
         contactId,
@@ -380,7 +448,7 @@ export class EmailValidationService {
       };
       
     } catch (error) {
-      console.error(`Error updating HubSpot contact ${contactId}:`, error);
+      logger.error(`Error updating HubSpot contact ${contactId}:`, error);
       return {
         success: false,
         contactId,

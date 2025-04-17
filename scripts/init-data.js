@@ -10,6 +10,7 @@ const path = require('path');
 const baseDir = process.cwd();
 const dataDir = path.join(baseDir, 'data');
 const knownEmailsDir = path.join(dataDir, 'known-emails');
+const logsDir = path.join(dataDir, 'logs');
 
 // File paths
 const validDomainsFile = path.join(dataDir, 'valid-domains.csv');
@@ -28,6 +29,11 @@ function createDirectories() {
   if (!fs.existsSync(knownEmailsDir)) {
     fs.mkdirSync(knownEmailsDir, { recursive: true });
     console.log(`Created directory: ${knownEmailsDir}`);
+  }
+  
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+    console.log(`Created directory: ${logsDir}`);
   }
 }
 
@@ -66,6 +72,20 @@ function createCsvFiles() {
   }
 }
 
+// Create initial log file
+function createInitialLogFile() {
+  console.log('Creating initial log file...');
+  
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const logFilePath = path.join(logsDir, `unmessy-${today}.log`);
+  
+  if (!fs.existsSync(logFilePath)) {
+    const initialLogEntry = `[${new Date().toISOString()}] [INFO] Project Unmessy initialized\n`;
+    fs.writeFileSync(logFilePath, initialLogEntry);
+    console.log(`Created initial log file: ${logFilePath}`);
+  }
+}
+
 // Run initialization
 function initialize() {
   console.log('Initializing Project Unmessy data files...');
@@ -73,9 +93,11 @@ function initialize() {
   try {
     createDirectories();
     createCsvFiles();
+    createInitialLogFile();
     
     console.log('\nInitialization completed successfully!');
     console.log('Project Unmessy is ready to use.');
+    console.log('To view logs, run: npm run view-logs');
     
   } catch (error) {
     console.error('Error during initialization:', error);

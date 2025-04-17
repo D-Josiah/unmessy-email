@@ -27,6 +27,13 @@ const defaultConfig = {
     apiKey: process.env.HUBSPOT_API_KEY || '',
     clientSecret: process.env.HUBSPOT_CLIENT_SECRET || '',
     skipSignatureVerification: process.env.SKIP_SIGNATURE_VERIFICATION === 'true'
+  },
+  
+  // Logging configuration
+  logging: {
+    level: process.env.LOG_LEVEL || 'info',  // debug, info, warn, error, fatal
+    console: process.env.LOG_CONSOLE !== 'false', // Log to console by default
+    fileLogging: process.env.FILE_LOGGING !== 'false' // Enable file logging by default
   }
 };
 
@@ -44,7 +51,8 @@ function addDerivedConfig(config) {
       validDomainsFile: path.join(config.dataDir, 'valid-domains.csv'),
       knownEmailsDir: path.join(config.dataDir, 'known-emails'),
       validatedEmailsFile: path.join(config.dataDir, 'known-emails', 'validated.csv'),
-      correctionsFile: path.join(config.dataDir, 'known-emails', 'corrections.csv')
+      correctionsFile: path.join(config.dataDir, 'known-emails', 'corrections.csv'),
+      logsDir: path.join(config.dataDir, 'logs')
     }
   };
 }
@@ -67,6 +75,10 @@ export function loadConfig(overrides = {}) {
     hubspot: {
       ...defaultConfig.hubspot,
       ...(overrides.hubspot || {})
+    },
+    logging: {
+      ...defaultConfig.logging,
+      ...(overrides.logging || {})
     }
   };
   
