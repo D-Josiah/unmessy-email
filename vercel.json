@@ -1,44 +1,49 @@
 {
   "version": 2,
   "builds": [
+    { "src": "public/**", "use": "@vercel/static" },
     { "src": "api/**/*.js", "use": "@vercel/node" }
   ],
   "routes": [
-    { 
-      "src": "/api/health", 
-      "dest": "/api/health.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization"
-      }
+    {
+       "src": "/",
+       "dest": "public/index.html"
     },
-    { 
-      "src": "/api/webhooks/hubspot", 
-      "dest": "/api/webhooks/hubspot.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization"
-      }
+    {
+       "src": "/api/health",
+       "dest": "/api/health.js",
+       "headers": {
+         "Access-Control-Allow-Origin": "*",
+         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+         "Access-Control-Allow-Headers": "Content-Type, Authorization"
+       }
     },
-    { 
-      "src": "/api/validate/email", 
-      "dest": "/api/validate/email.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization"
-      }
+    {
+       "src": "/api/webhooks/hubspot",
+       "dest": "/api/webhooks/hubspot.js",
+       "headers": {
+         "Access-Control-Allow-Origin": "*",
+         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+         "Access-Control-Allow-Headers": "Content-Type, Authorization"
+       }
     },
-    { 
-      "src": "/api/validate/batch", 
-      "dest": "/api/validate/batch.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization"
-      }
+    {
+       "src": "/api/validate/email",
+       "dest": "/api/validate/email.js",
+       "headers": {
+         "Access-Control-Allow-Origin": "*",
+         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+         "Access-Control-Allow-Headers": "Content-Type, Authorization"
+       }
+    },
+    {
+       "src": "/api/validate/batch",
+       "dest": "/api/validate/batch.js",
+       "headers": {
+         "Access-Control-Allow-Origin": "*",
+         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+         "Access-Control-Allow-Headers": "Content-Type, Authorization"
+       }
     }
   ]
 }
